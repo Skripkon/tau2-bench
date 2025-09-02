@@ -177,8 +177,6 @@ def to_litellm_messages(messages: list[Message]) -> list[dict]:
 
 
 # ---- LangChain / GigaChat helpers ----
-GIGA_CONFIG_PATH = "giga.yaml"
-
 
 def _is_gigachat_model(model: str) -> bool:
     try:
@@ -287,17 +285,25 @@ def generate(
                 "Missing deps for GigaChat. Install: pip install langchain langchain_gigachat"
             ) from e
 
-        # Load config from YAML
-        try:
-            with open(GIGA_CONFIG_PATH, "r") as f:
-                config_giga: dict[str, str] = safe_load(f)["GigaChat"]
-        except Exception as e:
-            raise RuntimeError(
-                f"Failed to load GigaChat config from {GIGA_CONFIG_PATH}: {e}"
-            ) from e
 
         lc_messages = to_langchain_messages(messages)
-        llm = GigaChat(**config_giga, timeout=200)
+
+        config_giga = {
+            "temperature": 0.0,
+            "verify_ssl_certs": False,
+            "repetition_penalty": 1.0,
+            "profanity_check": os.environ.get("GIGA_PROFANITY_CHECK", None),
+            "user": os.environ.get("GIGA_USER", None),
+            "password": os.environ.get("GIGA_PASSWORD", None),
+            "credentials": os.environ.get("GIGA_CREDENTIALS", None),
+            "auth_url": os.environ.get("GIGA_AUTH_URL", "https://gigachat.sberdevices.ru/v1/token"),
+            "base_url": os.environ.get("GIGA_BASE_URL", "https://gigachat.sberdevices.ru/v1"),
+            "scope": os.environ.get("GIGA_SCOPE", None),
+            "model": os.environ.get("GIGA_MODEL", "GigaChat-2"),
+            "timeout": os.environ.get("GIGA_TIMEOUT", 200)
+        }
+
+        llm = GigaChat(**config_giga)
         if tools:
             llm = llm.bind_tools(tools=tools)
         # Retry on empty content/tool_calls up to N times
@@ -376,7 +382,7 @@ def generate(
     if "gpt" in model.lower():
         # Set base_url for local OpenAI-compatible endpoint if not already set
         if "base_url" not in kwargs or kwargs["base_url"] is None:
-            kwargs["base_url"] = os.environ.get("BASE_URL")
+            kwargs["base_url"] = os.environ.get("OPENAI_API_BASE")
 
     for empty_attempt in range(empty_retry_attempts):
         try:
